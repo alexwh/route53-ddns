@@ -24,7 +24,7 @@ end
 @hostname = ARGV[0]
 @basehost = get_info('basehost')
 
-# @TODO: finish formatting of ip to delete
+# @TODO: finish formatting of ip to delete and maybe use an xml builder
 
 @xml = "<?xml version='1.0' encoding='UTF-8'?>
 <ChangeResourceRecordSetsRequest xmlns='https://route53.amazonaws.com/doc/2012-02-29/'>
