@@ -95,11 +95,18 @@ end
 def fetch
   @uri = URI(@apipath+"hostedzone/#{get_info('hostedzone')}/rrset")
   @request = Net::HTTP::Get.new(@uri.path)
-  puts @time_data
   @request['Date'] = Time.new.rfc822
   @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
 
+
   sendrequest
+
+  # failed attempts at parsing xml when there's no namespaces =\
+  # xml = Nokogiri::XML(sendrequest)
+  # names = xml.css("ResourceRecordSets ResourceRecordSet Name")
+  # puts names
+  # each_line {|line| puts line if line.include?(ARGV[0])}
+  # puts xml
 end
 
 def status
