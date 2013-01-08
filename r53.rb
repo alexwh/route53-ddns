@@ -7,6 +7,7 @@ require "nokogiri"
 
 def get_info(type)
   file_name = 'aws.key'
+  file_name = ARGV[2] unless ARGV[2].to_s.empty?
   info = Array.new
   f = File.new(file_name)
   f.read.each_line {|line| info << line.chomp}
@@ -63,21 +64,32 @@ def build_xml
   return builder.to_xml
 end
 
+def geturi(action_type)
+  baseurl = 'https://route53.amazonaws.com'
+  apipath = "/2012-02-29/"
+  action = "hostedzone/#{get_info('hostedzone')}/rrset" if action_type == 'rrset'
+  action = "change/#{@changeid}" if action_type == 'status'
+  return URI(baseurl+apipath+action) # seems dirty - some sort of concat method instead?
+end
 
 def request(type)
-  baseurl = 'https://route53.amazonaws.com'
-  apipath = "/2012-02-29/hostedzone/#{get_info('hostedzone')}/rrset"
-  uri = URI(baseurl+apipath) # seems dirty
-
   digest = OpenSSL::Digest::Digest.new('sha256')
   time_data = Time.new.rfc822 # declared in var in case it takes >1 sec
   digested_data = OpenSSL::HMAC.digest(digest, get_info('secret'), time_data)
   signature = Base64::encode64(digested_data).chomp
 
   if type == 'update'
-    request = Net::HTTP::Post.new(uri.path)
+    request = Net::HTTP::Post.new(geturi.path)
     request.body = build_xml
     request.content_type = 'text/xml'
+
+  elsif type == 'fetch'
+    request = Net::HTTP::Get.new(geturi.path)
+
+  elsif type == 'status'
+    request = Net::HTTP::Get.new(geturi.path)
+  else
+    return "invalid type - use update, fetch or status"
   end
 
 
@@ -93,4 +105,4 @@ end
 
 # puts request('update')
 
-puts "usage: #{$0} host [ttl]" if ARGV.empty?
+puts "usage: #{$0} host [ttl] [keyfile]" if ARGV.empty?
