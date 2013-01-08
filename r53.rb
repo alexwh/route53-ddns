@@ -67,43 +67,48 @@ def build_xml
 end
 
 def gensig
-  @digest = OpenSSL::Digest::Digest.new('sha256')
-  @time_data = Time.new.rfc822 # declared in var in case it takes >1 sec
-  digested_data = OpenSSL::HMAC.digest(digest, get_info('secret'), time_data)
+  time = Time.new.rfc822
+  digested_data = OpenSSL::HMAC.digest(OpenSSL::Digest::Digest.new('sha256'), get_info('secret'), time)
   return Base64::encode64(digested_data).chomp
 end
 
-def request
+def sendrequest
   Net::HTTP.start(@uri.host, @uri.port, use_ssl: @uri.scheme == 'https') do |http|
-    response = http.request(request)
+    response = http.request(@request)
     return response.body
   end
 end
 
 def update
-  action = "hostedzone/#{get_info('hostedzone')}/rrset"
-  @uri = URI(@apipath+action) # seems dirty - some sort of concat method instead?
+  @uri = URI(@apipath+"hostedzone/#{get_info('hostedzone')}/rrset") # + seems dirty - some sort of concat method instead?
 
-  request = Net::HTTP::Post.new(uri.path)
-  request.body = build_xml
-  request.content_type = 'text/xml'
+  @request = Net::HTTP::Post.new(uri.path)
+  @request.body = build_xml
+  @request.content_type = 'text/xml'
 
-  request['Date'] = @time_data
-  request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=Hmac#{@digest.name},Signature=#{gensig}"
+  @request['Date'] = Time.new.rfc822
+  @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
+
+  sendrequest
 end
 
 def fetch
-  action = "hostedzone/#{get_info('hostedzone')}/rrset"
-  @uri = URI(@apipath+action)
+  @uri = URI(@apipath+"hostedzone/#{get_info('hostedzone')}/rrset")
+  @request = Net::HTTP::Get.new(@uri.path)
+  puts @time_data
+  @request['Date'] = Time.new.rfc822
+  @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
 
-  request
+  sendrequest
 end
 
 def status
-  action = "change/#{@changeid}"
-  @uri = URI(@apipath+action)
+  @uri = URI(@apipath+"change/#{@changeid}")
+  @request = Net::HTTP::Get.new(@uri.path)
+  @request['Date'] = Time.new.rfc822
+  @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
 
-  request
+  sendrequest
 end
 
 puts fetch
