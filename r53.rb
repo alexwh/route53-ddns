@@ -5,6 +5,8 @@ require "openssl"
 require "base64"
 require "nokogiri"
 
+@apipath = "https://route53.amazonaws.com/2012-02-29/" # maybe a constant instead?
+
 def get_info(type)
   file_name = 'aws.key'
   file_name = ARGV[2] unless ARGV[2].to_s.empty?
@@ -13,9 +15,9 @@ def get_info(type)
   f.read.each_line {|line| info << line.chomp}
   f.close
 
-  return info[0] if type == 'secret' # your AWS secret
-  return info[1] if type == 'access' # your AWS access key ID
-  return info[2] if type == 'hostedzone' # your hosted zone ID
+  return info[0] if type == 'secret'
+  return info[1] if type == 'access'
+  return info[2] if type == 'hostedzone'
 end
 
 def build_xml
@@ -38,7 +40,7 @@ def build_xml
 
               xml.ResourceRecords {
                 xml.ResourceRecord {
-                  xml.Value "previous ip"
+                  xml.Value fetch
                 }
               }
             }
@@ -64,45 +66,46 @@ def build_xml
   return builder.to_xml
 end
 
-def geturi(action_type)
-  baseurl = 'https://route53.amazonaws.com'
-  apipath = "/2012-02-29/"
-  action = "hostedzone/#{get_info('hostedzone')}/rrset" if action_type == 'rrset'
-  action = "change/#{@changeid}" if action_type == 'status'
-  return URI(baseurl+apipath+action) # seems dirty - some sort of concat method instead?
+def gensig
+  @digest = OpenSSL::Digest::Digest.new('sha256')
+  @time_data = Time.new.rfc822 # declared in var in case it takes >1 sec
+  digested_data = OpenSSL::HMAC.digest(digest, get_info('secret'), time_data)
+  return Base64::encode64(digested_data).chomp
 end
 
-def request(type)
-  digest = OpenSSL::Digest::Digest.new('sha256')
-  time_data = Time.new.rfc822 # declared in var in case it takes >1 sec
-  digested_data = OpenSSL::HMAC.digest(digest, get_info('secret'), time_data)
-  signature = Base64::encode64(digested_data).chomp
-
-  if type == 'update'
-    request = Net::HTTP::Post.new(geturi.path)
-    request.body = build_xml
-    request.content_type = 'text/xml'
-
-  elsif type == 'fetch'
-    request = Net::HTTP::Get.new(geturi.path)
-
-  elsif type == 'status'
-    request = Net::HTTP::Get.new(geturi.path)
-  else
-    return "invalid type - use update, fetch or status"
-  end
-
-
-  request['Date'] = time_data
-  request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=Hmac#{digest.name},Signature=#{signature}"
-
-
-  Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |http|
+def request
+  Net::HTTP.start(@uri.host, @uri.port, use_ssl: @uri.scheme == 'https') do |http|
     response = http.request(request)
     return response.body
   end
 end
 
-# puts request('update')
+def update
+  action = "hostedzone/#{get_info('hostedzone')}/rrset"
+  @uri = URI(@apipath+action) # seems dirty - some sort of concat method instead?
+
+  request = Net::HTTP::Post.new(uri.path)
+  request.body = build_xml
+  request.content_type = 'text/xml'
+
+  request['Date'] = @time_data
+  request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=Hmac#{@digest.name},Signature=#{gensig}"
+end
+
+def fetch
+  action = "hostedzone/#{get_info('hostedzone')}/rrset"
+  @uri = URI(@apipath+action)
+
+  request
+end
+
+def status
+  action = "change/#{@changeid}"
+  @uri = URI(@apipath+action)
+
+  request
+end
+
+puts fetch
 
 puts "usage: #{$0} host [ttl] [keyfile]" if ARGV.empty?
