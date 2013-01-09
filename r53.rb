@@ -34,7 +34,7 @@ def send_request
   end
 end
 
-def get_date_auth
+def set_date_auth
   @request['Date'] = Time.new.rfc822
   @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
 end
@@ -91,8 +91,7 @@ def update
   @request.body = build_xml
   @request.content_type = 'text/xml'
 
-  get_date_auth
-
+  set_date_auth
   send_request
 
   xml = Nokogiri::XML(send_request)
@@ -105,8 +104,7 @@ def fetch_old_ip
   @uri.query = URI.encode_www_form(params)
   @request = Net::HTTP::Get.new(@uri.request_uri)
 
-  get_date_auth
-
+  set_date_auth
   send_request
 
   xml = Nokogiri::XML(send_request)
@@ -117,8 +115,7 @@ def status
   @uri = URI(@api_path+"#{@change_id}")
   @request = Net::HTTP::Get.new(@uri.path)
 
-  get_date_auth
-
+  set_date_auth
   send_request
 
   xml = Nokogiri::XML(send_request)
