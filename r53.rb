@@ -79,6 +79,12 @@ def send_request
   end
 end
 
+def get_date_auth
+  @request['Date'] = Time.new.rfc822
+  @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
+end
+
+
 def update
   @uri = URI(@api_path+"/hostedzone/#{get_info('hostedzone')}/rrset") # + seems dirty - some sort of concat method instead?
 
@@ -86,13 +92,12 @@ def update
   @request.body = build_xml
   @request.content_type = 'text/xml'
 
-  @request['Date'] = Time.new.rfc822
-  @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
+  get_date_auth
 
   send_request
 
   xml = Nokogiri::XML(send_request)
-  @change_id = xml.css("Id").to_s.sub(/<Id>/,"").sub(/<\/Id>/,"") # ugly. unfortunatley xml.xpath("//Id()") refuses to work (html only?)
+  @change_id = xml.css("Id").to_s.sub(/<Id>/,"").sub(/<\/Id>/,"") # ugly. unfortunatley xml.xpath("//Id()") refuses to work (is it html only?)
 end
 
 def fetch_old_ip
@@ -100,9 +105,8 @@ def fetch_old_ip
   params = {name: @hostname, type: "A", maxitems: "1"}
   @uri.query = URI.encode_www_form(params)
   @request = Net::HTTP::Get.new(@uri.request_uri)
-  @request['Date'] = Time.new.rfc822
-  @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
 
+  get_date_auth
 
   send_request
 
@@ -113,8 +117,8 @@ end
 def status
   @uri = URI(@api_path+"#{@change_id}")
   @request = Net::HTTP::Get.new(@uri.path)
-  @request['Date'] = Time.new.rfc822
-  @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
+
+  get_date_auth
 
   send_request
 
@@ -128,7 +132,7 @@ update
 
 while status == 'PENDING'
   puts status
-  sleep 10
+  sleep 20
 end
 
 puts "Done!" if status == 'INSYNC'
