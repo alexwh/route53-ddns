@@ -21,6 +21,24 @@ def get_info(type)
   return info[2] if type == 'hostedzone'
 end
 
+def gensig
+  time = Time.new.rfc822
+  digested_data = OpenSSL::HMAC.digest(OpenSSL::Digest::Digest.new('sha256'), get_info('secret'), time)
+  return Base64::encode64(digested_data).chomp
+end
+
+def send_request
+  Net::HTTP.start(@uri.host, @uri.port, use_ssl: @uri.scheme == 'https') do |http|
+    response = http.request(@request)
+    return response.body
+  end
+end
+
+def get_date_auth
+  @request['Date'] = Time.new.rfc822
+  @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
+end
+
 def build_xml
   ttl = '60'
   ttl = ARGV[1] unless ARGV[1].to_s.empty?
@@ -66,27 +84,8 @@ def build_xml
   return builder.to_xml
 end
 
-def gensig
-  time = Time.new.rfc822
-  digested_data = OpenSSL::HMAC.digest(OpenSSL::Digest::Digest.new('sha256'), get_info('secret'), time)
-  return Base64::encode64(digested_data).chomp
-end
-
-def send_request
-  Net::HTTP.start(@uri.host, @uri.port, use_ssl: @uri.scheme == 'https') do |http|
-    response = http.request(@request)
-    return response.body
-  end
-end
-
-def get_date_auth
-  @request['Date'] = Time.new.rfc822
-  @request['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=#{get_info('access')},Algorithm=HmacSHA256,Signature=#{gensig}"
-end
-
-
 def update
-  @uri = URI(@api_path+"/hostedzone/#{get_info('hostedzone')}/rrset") # + seems dirty - some sort of concat method instead?
+  @uri = URI("#{@api_path}/hostedzone/#{get_info('hostedzone')}/rrset")
 
   @request = Net::HTTP::Post.new(@uri.path)
   @request.body = build_xml
@@ -126,15 +125,14 @@ def status
   return xml.css("Status").to_s.sub(/<Status>/,"").sub(/<\/Status>/,"")
 end
 
+puts "usage: #{$0} host [ttl] [keyfile]" if ARGV.empty?
 
 fetch_old_ip
 update
 
 while status == 'PENDING'
   puts status
-  sleep 20
+  sleep 15
 end
 
 puts "Done!" if status == 'INSYNC'
-
-puts "usage: #{$0} host [ttl] [keyfile]" if ARGV.empty?
